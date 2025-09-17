@@ -1,9 +1,12 @@
 // lib/models/grocery_item.dart
+import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
-import 'dart:convert'; // Importez la bibliothèque pour la conversion JSON
+
+part 'grocery_item.g.dart'; // Ligne magique pour le code généré
 
 const uuid = Uuid();
 
+@HiveType(typeId: 0) // typeId unique pour chaque classe
 class GroceryItem {
   GroceryItem({
     required this.name,
@@ -11,23 +14,12 @@ class GroceryItem {
     String? id,
   }) : id = id ?? uuid.v4();
 
+  @HiveField(0) // Index unique pour chaque propriété
   final String id;
+
+  @HiveField(1)
   final String name;
+
+  @HiveField(2)
   final bool isDone;
-
-  // Méthode pour convertir l'objet en Map (JSON)
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'isDone': isDone,
-      };
-
-  // Constructeur pour créer un objet depuis une Map (JSON)
-  factory GroceryItem.fromJson(Map<String, dynamic> json) {
-    return GroceryItem(
-      id: json['id'],
-      name: json['name'],
-      isDone: json['isDone'],
-    );
-  }
 }

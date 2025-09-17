@@ -1,60 +1,55 @@
 // lib/providers/shopping_list_provider.dart
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../models/grocery_item.dart';
 
-// Constante pour la clé de sauvegarde
-const _shoppingListKey = 'shoppingList';
-
-// On utilise 'AsyncNotifier' au lieu de 'Notifier'
 class ShoppingListNotifier extends AsyncNotifier<List<GroceryItem>> {
+  // Constante pour le nom de la boîte Hive
+  static const _shoppingListBoxName = 'shoppingListBox';
+  
+  // Instance de la boîte Hive
+  late final Box<GroceryItem> _box;
 
   // La méthode 'build' est maintenant asynchrone et gère le chargement initial
   @override
   Future<List<GroceryItem>> build() async {
-    // 1. On attend que les SharedPreferences soient prêts
-    final prefs = await SharedPreferences.getInstance();
+    // 1. Initialise Hive
+    await Hive.initFlutter();
     
-    // 2. On récupère la chaîne JSON sauvegardée
-    final String? itemsJsonString = prefs.getString(_shoppingListKey);
-
-    if (itemsJsonString != null) {
-      // 3. On décode la chaîne JSON en liste de Maps
-      final List<dynamic> jsonList = jsonDecode(itemsJsonString);
-      
-      // 4. On convertit chaque Map en objet GroceryItem et on retourne la liste
-      return jsonList.map((json) => GroceryItem.fromJson(json)).toList();
+    // 2. Enregistre l'adapter généré pour notre classe
+    if (!Hive.isBoxOpen(_shoppingListBoxName)) {
+      if (!Hive.isAdapterRegistered(0)) { // 0 est le typeId de notre classe
+        Hive.registerAdapter(GroceryItemAdapter()); // L'adapter est dans le fichier .g.dart
+      }
+      _box = await Hive.openBox<GroceryItem>(_shoppingListBoxName);
+    } else {
+      _box = Hive.box<GroceryItem>(_shoppingListBoxName);
     }
     
-    // Si rien n'est sauvegardé, on retourne une liste vide
-    return [];
+    // 3. Retourne la liste des items stockés
+    return _box.values.toList();
   }
 
-  // Méthode privée pour sauvegarder l'état actuel de la liste
+  // Méthode pour sauvegarder l'état actuel de la liste
   Future<void> _save() async {
-    // 1. On récupère l'instance des SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
+    // 1. On efface toutes les données existantes dans la boîte
+    await _box.clear();
     
-    // 2. On convertit la liste d'objets en liste de Maps
-    final List<Map<String, dynamic>> jsonList = state.value!.map((item) => item.toJson()).toList();
-    
-    // 3. On encode la liste de Maps en chaîne JSON et on la sauvegarde
-    await prefs.setString(_shoppingListKey, jsonEncode(jsonList));
+    // 2. On ajoute tous les items de l'état actuel
+    await _box.addAll(state.value!);
   }
 
   // --- Méthodes de modification de l'état ---
-  // On utilise 'state = AsyncValue.data(...) pour mettre à jour l'état
   void addItem(String name) {
     state = AsyncValue.data([...state.value!, GroceryItem(name: name)]);
-    _save(); // On n'oublie pas de sauvegarder après chaque modification
+    _save(); // Sauvegarde après la mise à jour de l'état
   }
 
   void toggleItemStatus(String id) {
     state = AsyncValue.data([
       for (final item in state.value!)
         if (item.id == id)
-          GroceryItem(name: item.name, isDone: !item.isDone)
+          GroceryItem(name: item.name, isDone: !item.isDone, id: item.id)
         else
           item,
     ]);
