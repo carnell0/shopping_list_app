@@ -1,68 +1,97 @@
-// lib/providers/shopping_list_provider.dart
+// gestion de l'&tat et logique métier
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../models/grocery_item.dart';
+import '../services/storage_service.dart';
+import '../services/websocket_service.dart';
 
 class ShoppingListNotifier extends AsyncNotifier<List<GroceryItem>> {
-  // Constante pour le nom de la boîte Hive
-  static const _shoppingListBoxName = 'shoppingListBox';
-  
-  // Instance de la boîte Hive
-  late final Box<GroceryItem> _box;
+  late final StorageService _storageService;
+  late final WebSocketService _webSocketService;
+  late final String _clientId;
 
-  // La méthode 'build' est maintenant asynchrone et gère le chargement initial
   @override
   Future<List<GroceryItem>> build() async {
-    // 1. Initialise Hive
-    await Hive.initFlutter();
+    _clientId = uuid.v4(); // Génère un ID unique pour ce client
+    _storageService = ref.read(storageServiceProvider);
+    _webSocketService = ref.read(webSocketServiceProvider);
+
+    await _storageService.init(); // Initialise Hive
     
-    // 2. Enregistre l'adapter généré pour notre classe
-    if (!Hive.isBoxOpen(_shoppingListBoxName)) {
-      if (!Hive.isAdapterRegistered(0)) { // 0 est le typeId de notre classe
-        Hive.registerAdapter(GroceryItemAdapter()); // L'adapter est dans le fichier .g.dart
-      }
-      _box = await Hive.openBox<GroceryItem>(_shoppingListBoxName);
-    } else {
-      _box = Hive.box<GroceryItem>(_shoppingListBoxName);
+    // Connecte le WebSocket et écoute les messages
+    _webSocketService.connect();
+    _webSocketService.messages.listen(_handleWebSocketMessage);
+
+    return _storageService.loadItems();
+  }
+
+  // Gère les messages entrants du WebSocket
+  void _handleWebSocketMessage(Map<String, dynamic> message) {
+    // Vérifie si le message vient de ce client, si oui, on l'ignore (pour éviter les boucles)
+    if (message['sender'] == _clientId) {
+      return;
+    }
+
+    final String type = message['type'] as String;
+    // On assume que 'item' est toujours présent et valide pour 'add' et 'toggle'
+    // Pour 'delete', seul l'ID est nécessaire.
+    Map<String, dynamic>? itemData;
+    String? itemId;
+
+    if (message.containsKey('item')) {
+      itemData = message['item'] as Map<String, dynamic>;
+      itemId = itemData['id'] as String;
+    }
+
+    List<GroceryItem> currentList = state.value!;
+
+    if (type == 'add' && itemData != null) {
+      final newItem = GroceryItem.fromJson(itemData);
+      currentList = [...currentList, newItem];
+    } else if (type == 'toggle' && itemId != null) {
+      currentList = currentList.map((item) {
+        if (item.id == itemId) {
+          return item.copyWith(isDone: !item.isDone); // Utilisez copyWith
+        }
+        return item;
+      }).toList();
+    } else if (type == 'delete' && itemId != null) {
+      currentList = currentList.where((item) => item.id != itemId).toList();
     }
     
-    // 3. Retourne la liste des items stockés
-    return _box.values.toList();
+    state = AsyncValue.data(currentList);
+    // Sauvegarde l'état après modification reçue du serveur
+    _storageService.saveItems(state.value!);
   }
 
-  // Méthode pour sauvegarder l'état actuel de la liste
-  Future<void> _save() async {
-    // 1. On efface toutes les données existantes dans la boîte
-    await _box.clear();
-    
-    // 2. On ajoute tous les items de l'état actuel
-    await _box.addAll(state.value!);
-  }
-
-  // --- Méthodes de modification de l'état ---
+  // ajout de l'article
   void addItem(String name) {
-    state = AsyncValue.data([...state.value!, GroceryItem(name: name)]);
-    _save(); // Sauvegarde après la mise à jour de l'état
+    final newItem = GroceryItem(name: name);
+    state = AsyncValue.data([...state.value!, newItem]);
+    _storageService.saveItems(state.value!);
+    _webSocketService.sendMessage({'type': 'add', 'item': newItem.toJson(), 'sender': _clientId});
   }
 
-  void toggleItemStatus(String id) {
+  void toggleItemStatus(String id) { //on détermine le type et le format de message envoyé au serveur 
     state = AsyncValue.data([
       for (final item in state.value!)
         if (item.id == id)
-          GroceryItem(name: item.name, isDone: !item.isDone, id: item.id)
+          item.copyWith(isDone: !item.isDone) // Utilisez copyWith
         else
           item,
     ]);
-    _save();
+    _storageService.saveItems(state.value!);
+    final toggledItem = state.value!.firstWhere((item) => item.id == id);
+    _webSocketService.sendMessage({'type': 'toggle', 'item': toggledItem.toJson(), 'sender': _clientId});
   }
 
   void removeItem(String id) {
     state = AsyncValue.data(state.value!.where((item) => item.id != id).toList());
-    _save();
+    _storageService.saveItems(state.value!);
+    _webSocketService.sendMessage({'type': 'delete', 'item': {'id': id}, 'sender': _clientId});
   }
 }
 
-// Notre provider devient un AsyncNotifierProvider
 final shoppingListProvider = AsyncNotifierProvider<ShoppingListNotifier, List<GroceryItem>>(
   () => ShoppingListNotifier(),
 );

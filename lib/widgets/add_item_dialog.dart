@@ -1,4 +1,4 @@
-// lib/widgets/add_item_dialog.dart
+// boite de dialogue pour ajouter un article
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/shopping_list_provider.dart';

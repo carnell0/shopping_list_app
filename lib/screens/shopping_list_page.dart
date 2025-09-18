@@ -1,4 +1,4 @@
-// lib/screens/shopping_list_page.dart
+// interface d'affichage de la liste des articles
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/shopping_list_provider.dart';
@@ -21,6 +21,7 @@ class ShoppingListPage extends ConsumerWidget {
         title: const Text('Ma Liste de Courses'),
       ),
       // 2. On utilise 'when' pour gérer les différents états de l'AsyncValue
+      // data, loading et error
       body: asyncShoppingList.when(
         data: (shoppingList) {
           // L'état est en 'data', on peut afficher la liste

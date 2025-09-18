@@ -1,4 +1,3 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/shopping_list_page.dart';
@@ -21,11 +20,10 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const AuthScreenWrapper(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
-
-// Dans votre fichier lib/main.dart ou lib/auth_screen_wrapper.dart
 
 class AuthScreenWrapper extends StatefulWidget {
   const AuthScreenWrapper({super.key});
