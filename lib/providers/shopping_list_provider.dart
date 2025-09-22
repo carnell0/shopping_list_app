@@ -1,6 +1,5 @@
 // gestion de l'&tat et logique métier
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 import '../models/grocery_item.dart';
 import '../services/storage_service.dart';
 import '../services/websocket_service.dart';
@@ -12,7 +11,7 @@ class ShoppingListNotifier extends AsyncNotifier<List<GroceryItem>> {
 
   @override
   Future<List<GroceryItem>> build() async {
-    _clientId = uuid.v4(); // Génère un ID unique pour ce client
+    _clientId = uuid.v4();
     _storageService = ref.read(storageServiceProvider);
     _webSocketService = ref.read(webSocketServiceProvider);
 
@@ -27,14 +26,11 @@ class ShoppingListNotifier extends AsyncNotifier<List<GroceryItem>> {
 
   // Gère les messages entrants du WebSocket
   void _handleWebSocketMessage(Map<String, dynamic> message) {
-    // Vérifie si le message vient de ce client, si oui, on l'ignore (pour éviter les boucles)
     if (message['sender'] == _clientId) {
       return;
     }
 
     final String type = message['type'] as String;
-    // On assume que 'item' est toujours présent et valide pour 'add' et 'toggle'
-    // Pour 'delete', seul l'ID est nécessaire.
     Map<String, dynamic>? itemData;
     String? itemId;
 
@@ -51,7 +47,7 @@ class ShoppingListNotifier extends AsyncNotifier<List<GroceryItem>> {
     } else if (type == 'toggle' && itemId != null) {
       currentList = currentList.map((item) {
         if (item.id == itemId) {
-          return item.copyWith(isDone: !item.isDone); // Utilisez copyWith
+          return item.copyWith(isDone: !item.isDone);
         }
         return item;
       }).toList();
@@ -60,7 +56,6 @@ class ShoppingListNotifier extends AsyncNotifier<List<GroceryItem>> {
     }
     
     state = AsyncValue.data(currentList);
-    // Sauvegarde l'état après modification reçue du serveur
     _storageService.saveItems(state.value!);
   }
 
@@ -76,7 +71,7 @@ class ShoppingListNotifier extends AsyncNotifier<List<GroceryItem>> {
     state = AsyncValue.data([
       for (final item in state.value!)
         if (item.id == id)
-          item.copyWith(isDone: !item.isDone) // Utilisez copyWith
+          item.copyWith(isDone: !item.isDone)
         else
           item,
     ]);

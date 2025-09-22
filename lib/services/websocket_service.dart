@@ -35,7 +35,7 @@ class WebSocketService {
         },
         onDone: () {
           debugPrint('WebSocket déconnecté');
-          _messageController.close(); // Ferme le StreamController quand le socket se ferme
+          _messageController.close();
         },
         onError: (error) {
           debugPrint('Erreur WebSocket: $error');
@@ -49,8 +49,8 @@ class WebSocketService {
   }
 
   void sendMessage(Map<String, dynamic> data) {
-    if (_channel != null && _channel!.sink != null) {
-      final message = jsonEncode(data); // Encode le Map en JSON
+    if (_channel != null) {
+      final message = jsonEncode(data);
       _channel!.sink.add(message);
       debugPrint('Message envoyé au serveur: $message');
     } else {
@@ -74,15 +74,9 @@ class WebSocketService {
 
 // Fournisseur Riverpod pour le service WebSocket
 final webSocketServiceProvider = Provider<WebSocketService>((ref) {
-  // IMPORTANT: Mettez l'adresse IP correcte de votre serveur Python
-  // Pour émulateur Android: ws://10.0.2.2:8765
-  // Pour téléphone physique: ws://VOTRE_IP_LOCALE:8765 (ex: ws://192.168.1.10:8765)
-  const String serverUrl = 'ws://10.223.254.112:8765';
+  const String serverUrl = 'ws://10.89.44.112:8765';
   final service = WebSocketService(serverUrl);
-  // Optionnel: Connexion automatique au démarrage de l'app ou du service
-  // service.connect(); 
-
-  // Assurez-vous de déconnecter et de disposer du service quand il n'est plus utilisé
+  
   ref.onDispose(() {
     service.disconnect();
     service.dispose();

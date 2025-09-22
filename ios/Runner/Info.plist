@@ -3,7 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>NSFaceIDUsageDescription</key>
-    <string>Pourquoi l'application a besoin d'accéder à Face ID.</string>
+    <string>L'authentification par Face ID est requise pour accéder à vos listes de courses en toute sécurité.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to scan barcodes</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -49,3 +51,4 @@
 	<true/>
 </dict>
 </plist>
+
