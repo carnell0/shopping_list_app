@@ -1,30 +1,43 @@
-// interface d'affichage de la liste des articles
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/shopping_list_provider.dart';
-import '../widgets/add_item_dialog.dart';
+import '../../providers/shopping_list_provider.dart';
 
-// 2. Utilisation d'un ConsumerWidget pour accéder au provider
-class ShoppingListPage extends ConsumerWidget {
-  const ShoppingListPage({super.key});
+class HomeTab extends ConsumerWidget {
+  const HomeTab({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 1. On watch le provider qui retourne maintenant un AsyncValue
     final asyncShoppingList = ref.watch(shoppingListProvider);
-    
-    // Pour interagir avec le provider on utilise toujours 'ref.read'
     final shoppingListNotifier = ref.read(shoppingListProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ma Liste de Courses'),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        elevation: 1,
       ),
-      // 2. On utilise 'when' pour gérer les différents états de l'AsyncValue
-      // data, loading et error
       body: asyncShoppingList.when(
         data: (shoppingList) {
-          // L'état est en 'data', on peut afficher la liste
+          if (shoppingList.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.shopping_cart_outlined, size: 80, color: Colors.grey),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Votre liste est vide.',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Ajoutez des articles via l'onglet 'Ajouter'.",
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
           return ListView.builder(
             itemCount: shoppingList.length,
             itemBuilder: (context, index) {
@@ -34,14 +47,16 @@ class ShoppingListPage extends ConsumerWidget {
                   item.name,
                   style: TextStyle(
                     decoration: item.isDone ? TextDecoration.lineThrough : null,
+                    color: item.isDone ? Colors.grey : null,
                   ),
                 ),
                 leading: Checkbox(
                   value: item.isDone,
                   onChanged: (_) => shoppingListNotifier.toggleItemStatus(item.id),
+                  activeColor: Theme.of(context).primaryColor,
                 ),
                 trailing: IconButton(
-                  icon: const Icon(Icons.delete),
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                   onPressed: () => shoppingListNotifier.removeItem(item.id),
                 ),
               );
@@ -49,22 +64,11 @@ class ShoppingListPage extends ConsumerWidget {
           );
         },
         loading: () {
-          // L'état est en 'loading', on affiche un indicateur
           return const Center(child: CircularProgressIndicator());
         },
         error: (error, stackTrace) {
-          // L'état est en 'error', on affiche un message
           return Center(child: Text('Erreur : $error'));
         },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (context) => const AddItemDialog(),
-          );
-        },
-        child: const Icon(Icons.add),
       ),
     );
   }

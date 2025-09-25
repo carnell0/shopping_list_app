@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'shopping_list_page.dart';
 import '../services/auth_service.dart';
 import 'register_face_screen.dart';
 import 'face_unlock_screen.dart';
+import 'home_screen.dart';
 
 class AuthScreenWrapper extends StatefulWidget {
   const AuthScreenWrapper({super.key});
@@ -35,7 +35,7 @@ class _AuthScreenWrapperState extends State<AuthScreenWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_isAuthenticated) {
-      return const ShoppingListPage();
+      return const HomeScreen();
     }
 
     return Scaffold(

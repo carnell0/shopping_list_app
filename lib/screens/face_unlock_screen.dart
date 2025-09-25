@@ -3,8 +3,8 @@ import 'dart:io';
 import 'dart:math';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:shopping_list_app/screens/shopping_list_page.dart';
 import 'package:shopping_list_app/services/face_recognition_service.dart';
+import 'home_screen.dart';
 
 class FaceUnlockScreen extends StatefulWidget {
   const FaceUnlockScreen({super.key});
@@ -106,7 +106,7 @@ class _FaceUnlockScreenState extends State<FaceUnlockScreen> {
     _cameraController?.dispose();
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const ShoppingListPage()),
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
       );
     }
   }
