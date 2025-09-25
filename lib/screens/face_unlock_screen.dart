@@ -1,8 +1,10 @@
 import 'dart:async';
-
+import 'dart:io';
+import 'dart:math';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:shopping_list_app/screens/shopping_list_page.dart';
+import 'package:shopping_list_app/services/face_recognition_service.dart';
 
 class FaceUnlockScreen extends StatefulWidget {
   const FaceUnlockScreen({super.key});
@@ -12,24 +14,33 @@ class FaceUnlockScreen extends StatefulWidget {
 }
 
 class _FaceUnlockScreenState extends State<FaceUnlockScreen> {
+  final FaceRecognitionService _faceRecognitionService = FaceRecognitionService();
   CameraController? _cameraController;
+  Timer? _timer;
+
   bool _isCameraInitialized = false;
-  FaceDetector? _faceDetector;
-  List<Face> _faces = [];
-  CustomPaint? _customPaint;
+  bool _isProcessing = false;
+  List<double>? _registeredFaceVector;
+  String _message = "Veuillez centrer votre visage";
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
-    _initializeFaceDetector();
+    _initialize();
   }
 
-  @override
-  void dispose() {
-    _cameraController?.dispose();
-    _faceDetector?.close();
-    super.dispose();
+  Future<void> _initialize() async {
+    await _faceRecognitionService.loadModel();
+    _registeredFaceVector = await _faceRecognitionService.getRegisteredFace();
+
+    if (_registeredFaceVector == null) {
+      setState(() {
+        _message = "Aucun visage enregistré. Veuillez d'abord vous enregistrer.";
+      });
+      return;
+    }
+
+    await _initializeCamera();
   }
 
   Future<void> _initializeCamera() async {
@@ -41,115 +52,122 @@ class _FaceUnlockScreenState extends State<FaceUnlockScreen> {
 
     _cameraController = CameraController(
       frontCamera,
-      ResolutionPreset.high,
+      ResolutionPreset.medium,
       enableAudio: false,
     );
 
+    await _cameraController!.initialize();
+    setState(() {
+      _isCameraInitialized = true;
+    });
+
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!_isProcessing) {
+        _captureAndProcessImage();
+      }
+    });
+  }
+
+  Future<void> _captureAndProcessImage() async {
+    if (_isProcessing || _cameraController == null || !_cameraController!.value.isInitialized) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
     try {
-      await _cameraController!.initialize();
-      setState(() {
-        _isCameraInitialized = true;
-      });
-      _cameraController!.startImageStream((image) {
-        _processImage(image);
-      });
+      final XFile imageFile = await _cameraController!.takePicture();
+      final File file = File(imageFile.path);
+
+      final currentFaceVector = await _faceRecognitionService.processImageForRecognition(file);
+      await file.delete();
+
+      if (currentFaceVector != null) {
+        double distance = _euclideanDistance(_registeredFaceVector!, currentFaceVector);
+        print("Distance euclidienne: $distance");
+
+        if (distance < 1.0) {
+          _onRecognitionSuccess();
+        }
+      }
     } catch (e) {
-      print('Error initializing camera: $e');
+      print("Erreur durant la capture et le traitement de l'image: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
-  void _initializeFaceDetector() {
-    _faceDetector = FaceDetector(
-      options: FaceDetectorOptions(
-        enableContours: true,
-        enableLandmarks: true,
-      ),
-    );
-  }
-
-  Future<void> _processImage(CameraImage image) async {
-    final inputImage = InputImage.fromBytes(
-      bytes: image.planes.first.bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: InputImageRotation.rotation0deg,
-        format: InputImageFormat.nv21,
-        bytesPerRow: image.planes.first.bytesPerRow,
-      ),
-    );
-
-    final faces = await _faceDetector!.processImage(inputImage);
-
+  void _onRecognitionSuccess() {
+    _timer?.cancel();
+    _cameraController?.dispose();
     if (mounted) {
-      setState(() {
-        _faces = faces;
-        _customPaint = CustomPaint(painter: FacePainter(_faces, Size(image.width.toDouble(), image.height.toDouble())));
-      });
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const ShoppingListPage()),
+      );
     }
+  }
+
+  double _euclideanDistance(List<double> v1, List<double> v2) {
+    double sum = 0.0;
+    for (int i = 0; i < v1.length; i++) {
+      sum += pow(v1[i] - v2[i], 2);
+    }
+    return sqrt(sum);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _cameraController?.dispose();
+    _faceRecognitionService.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Face Unlock'),
-      ),
-      body: _isCameraInitialized
-          ? Stack(
-              fit: StackFit.expand,
-              children: [
-                CameraPreview(_cameraController!),
-                if (_customPaint != null) _customPaint!,
-              ],
-            )
-          : const Center(
-              child: CircularProgressIndicator(),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (_isCameraInitialized && _cameraController != null)
+            CameraPreview(_cameraController!)
+          else
+            Center(
+              child: Text(_message, style: const TextStyle(fontSize: 18, color: Colors.white), textAlign: TextAlign.center,),
             ),
-    );
-  }
-}
+          
+          Center(
+            child: Container(
+              width: 280,
+              height: 380,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white.withOpacity(0.7), width: 3),
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ),
 
-class FacePainter extends CustomPainter {
-  final List<Face> faces;
-  final Size imageSize;
-
-  FacePainter(this.faces, this.imageSize);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..color = Colors.red;
-
-    for (final face in faces) {
-      final rect = _scaleRect(
-        rect: face.boundingBox,
-        imageSize: imageSize,
-        widgetSize: size,
-      );
-      canvas.drawRect(rect, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(FacePainter oldDelegate) {
-    return oldDelegate.faces != faces;
-  }
-
-  Rect _scaleRect({
-    required Rect rect,
-    required Size imageSize,
-    required Size widgetSize,
-  }) {
-    final scaleX = widgetSize.width / imageSize.width;
-    final scaleY = widgetSize.height / imageSize.height;
-
-    return Rect.fromLTRB(
-      rect.left * scaleX,
-      rect.top * scaleY,
-      rect.right * scaleX,
-      rect.bottom * scaleY,
+          Positioned(
+            bottom: 80,
+            left: 0,
+            right: 0,
+            child: Text(
+              _message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                backgroundColor: Colors.black54
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

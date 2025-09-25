@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'shopping_list_page.dart';
 import '../services/auth_service.dart';
+import 'register_face_screen.dart';
 import 'face_unlock_screen.dart';
 
 class AuthScreenWrapper extends StatefulWidget {
@@ -79,6 +80,17 @@ class _AuthScreenWrapperState extends State<AuthScreenWrapper> {
                   child: const Text('Face Unlock'),
                 ),
               ],
+            ),
+            const SizedBox(height: 32),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const RegisterFaceScreen(),
+                  ),
+                );
+              },
+              child: const Text("Pas encore enregistré ? Enregistrer mon visage"),
             ),
           ],
         ),

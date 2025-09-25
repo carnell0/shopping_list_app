@@ -1,4 +1,5 @@
 {
     "cmake.ignoreCMakeListsMissing": true,
-    "python.analysis.autoImportCompletions": true
+    "python.analysis.autoImportCompletions": true,
+    "java.configuration.updateBuildConfiguration": "interactive"
 }
