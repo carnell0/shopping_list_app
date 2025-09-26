@@ -1,8 +1,10 @@
-// gestion de l'&tat et logique métier
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../models/grocery_item.dart';
 import '../services/storage_service.dart';
 import '../services/websocket_service.dart';
+
+const uuid = Uuid();
 
 class ShoppingListNotifier extends AsyncNotifier<List<GroceryItem>> {
   late final StorageService _storageService;
@@ -15,75 +17,101 @@ class ShoppingListNotifier extends AsyncNotifier<List<GroceryItem>> {
     _storageService = ref.read(storageServiceProvider);
     _webSocketService = ref.read(webSocketServiceProvider);
 
-    await _storageService.init(); // Initialise Hive
-    
-    // Connecte le WebSocket et écoute les messages
-    _webSocketService.connect();
-    _webSocketService.messages.listen(_handleWebSocketMessage);
+    // Écoute les messages entrants du WebSocket
+    ref.listen<AsyncValue<Map<String, dynamic>>>(webSocketMessagesProvider, (previous, next) {
+      final message = next.value;
+      if (message != null) {
+        _handleWebSocketMessage(message);
+      }
+    });
 
+    await _storageService.init();
     return _storageService.loadItems();
   }
 
-  // Gère les messages entrants du WebSocket
   void _handleWebSocketMessage(Map<String, dynamic> message) {
     if (message['sender'] == _clientId) {
       return;
     }
 
-    final String type = message['type'] as String;
-    Map<String, dynamic>? itemData;
-    String? itemId;
+    final type = message['type'] as String?;
+    final itemData = message['item'] as Map<String, dynamic>?;
 
-    if (message.containsKey('item')) {
-      itemData = message['item'] as Map<String, dynamic>;
-      itemId = itemData['id'] as String;
-    }
+    if (type == null || itemData == null) return;
 
-    List<GroceryItem> currentList = state.value!;
+    final itemId = itemData['id'] as String?;
+    var currentList = state.value ?? [];
 
-    if (type == 'add' && itemData != null) {
-      final newItem = GroceryItem.fromJson(itemData);
-      currentList = [...currentList, newItem];
-    } else if (type == 'toggle' && itemId != null) {
-      currentList = currentList.map((item) {
-        if (item.id == itemId) {
-          return item.copyWith(isDone: !item.isDone);
+    switch (type) {
+      case 'add':
+        final newItem = GroceryItem.fromJson(itemData);
+        if (!currentList.any((item) => item.id == newItem.id)) {
+          currentList = [...currentList, newItem];
         }
-        return item;
-      }).toList();
-    } else if (type == 'delete' && itemId != null) {
-      currentList = currentList.where((item) => item.id != itemId).toList();
+        break;
+      case 'toggle':
+        if (itemId != null) {
+          currentList = [
+            for (final item in currentList)
+              if (item.id == itemId)
+                item.copyWith(isDone: itemData['isDone'] as bool? ?? !item.isDone)
+              else
+                item,
+          ];
+        }
+        break;
+      case 'delete':
+        if (itemId != null) {
+          currentList = currentList.where((item) => item.id != itemId).toList();
+        }
+        break;
     }
-    
+
     state = AsyncValue.data(currentList);
-    _storageService.saveItems(state.value!);
+    _storageService.saveItems(currentList);
   }
 
-  // ajout de l'article
   void addItem(String name) {
     final newItem = GroceryItem(name: name);
-    state = AsyncValue.data([...state.value!, newItem]);
+    final currentList = state.value ?? [];
+    state = AsyncValue.data([...currentList, newItem]);
     _storageService.saveItems(state.value!);
-    _webSocketService.sendMessage({'type': 'add', 'item': newItem.toJson(), 'sender': _clientId});
+    _webSocketService.sendMessage({
+      'type': 'add',
+      'item': newItem.toJson(),
+      'sender': _clientId,
+    });
   }
 
-  void toggleItemStatus(String id) { //on détermine le type et le format de message envoyé au serveur 
+  void toggleItemStatus(String id) {
+    final currentList = state.value ?? [];
+    GroceryItem? toggledItem;
     state = AsyncValue.data([
-      for (final item in state.value!)
+      for (final item in currentList)
         if (item.id == id)
-          item.copyWith(isDone: !item.isDone)
+          (toggledItem = item.copyWith(isDone: !item.isDone))
         else
           item,
     ]);
     _storageService.saveItems(state.value!);
-    final toggledItem = state.value!.firstWhere((item) => item.id == id);
-    _webSocketService.sendMessage({'type': 'toggle', 'item': toggledItem.toJson(), 'sender': _clientId});
+    if (toggledItem != null) {
+      _webSocketService.sendMessage({
+        'type': 'toggle',
+        'item': toggledItem.toJson(),
+        'sender': _clientId,
+      });
+    }
   }
 
   void removeItem(String id) {
-    state = AsyncValue.data(state.value!.where((item) => item.id != id).toList());
+    final currentList = state.value ?? [];
+    state = AsyncValue.data(currentList.where((item) => item.id != id).toList());
     _storageService.saveItems(state.value!);
-    _webSocketService.sendMessage({'type': 'delete', 'item': {'id': id}, 'sender': _clientId});
+    _webSocketService.sendMessage({
+      'type': 'delete',
+      'item': {'id': id},
+      'sender': _clientId,
+    });
   }
 }
 

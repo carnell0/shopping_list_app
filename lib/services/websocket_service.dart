@@ -1,85 +1,112 @@
-// Gestion de la communication en temps réel
-import 'dart:convert';
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-class WebSocketService {
-  WebSocketChannel? _channel;
-  final String _url;
+final webSocketServiceProvider = Provider<WebSocketService>((ref) {
+  const String serverUrl ='ws://10.87.75.112:8765';
   
-  // Utilise un StreamController pour diffuser les messages reçus aux auditeurs
-  final _messageController = StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get messages => _messageController.stream;
+  final service = WebSocketService(serverUrl);
 
-  WebSocketService(this._url);
+  service.connect();
+
+  ref.onDispose(() {
+    debugPrint("WebSocketService: Le provider est détruit, déconnexion.");
+    service.dispose();
+  });
+
+  return service;
+});
+
+final webSocketMessagesProvider = StreamProvider<Map<String, dynamic>>((ref) {
+  final service = ref.watch(webSocketServiceProvider);
+  return service.messages;
+});
+
+class WebSocketService {
+  final String _url;
+  WebSocketChannel? _channel;
+  StreamController<Map<String, dynamic>>? _messageController;
+  Timer? _reconnectTimer;
+  bool _isConnected = false;
+
+  Stream<Map<String, dynamic>> get messages =>
+      _messageController?.stream ?? Stream.empty();
+
+  WebSocketService(this._url) {
+    _messageController = StreamController<Map<String, dynamic>>.broadcast();
+  }
 
   void connect() {
+    if (_isConnected) {
+      debugPrint("WebSocketService: Déjà connecté.");
+      return;
+    }
+    
+    debugPrint("WebSocketService: Connexion à $_url...");
     try {
       _channel = WebSocketChannel.connect(Uri.parse(_url));
-      debugPrint('WebSocket connecté à $_url');
-      // Envoie un message de test dès la connexion
-      sendMessage({'type': 'ping', 'content': 'hello'});
+      _isConnected = true;
+      _reconnectTimer?.cancel(); 
 
       _channel!.stream.listen(
         (message) {
-          debugPrint('Message reçu du serveur: $message');
+          // Décode le message JSON et l'ajoute au stream.
           try {
-            // Tente de parser le message JSON
-            _messageController.add(jsonDecode(message));
+            final decodedMessage = jsonDecode(message) as Map<String, dynamic>;
+            _messageController?.add(decodedMessage);
+            debugPrint("WebSocketService: Message reçu: $decodedMessage");
           } catch (e) {
-            debugPrint('Erreur de parsing JSON: $e');
-            _messageController.add({'type': 'error', 'content': 'JSON_PARSE_ERROR', 'original': message});
+            debugPrint("WebSocketService: Erreur de décodage JSON: $e");
           }
         },
         onDone: () {
-          debugPrint('WebSocket déconnecté');
-          _messageController.close();
+          debugPrint("WebSocketService: Déconnecté du serveur.");
+          _isConnected = false;
+          _scheduleReconnect();
         },
         onError: (error) {
-          debugPrint('Erreur WebSocket: $error');
-          _messageController.add({'type': 'error', 'content': error.toString()});
+          debugPrint("WebSocketService: Erreur - $error");
+          _isConnected = false;
+          _channel = null; 
+          _scheduleReconnect();
         },
       );
     } catch (e) {
-      debugPrint('Erreur de connexion WebSocket: $e');
-      _messageController.add({'type': 'error', 'content': 'CONNECT_ERROR', 'details': e.toString()});
+      debugPrint("WebSocketService: Erreur de connexion initiale - $e");
+      _isConnected = false;
+      _scheduleReconnect();
     }
+  }
+
+  void _scheduleReconnect() {
+    if (_reconnectTimer?.isActive ?? false) return; // Déjà planifié.
+
+    _reconnectTimer = Timer(const Duration(seconds: 5), () {
+      debugPrint("WebSocketService: Tentative de reconnexion...");
+      connect();
+    });
   }
 
   void sendMessage(Map<String, dynamic> data) {
-    if (_channel != null) {
-      final message = jsonEncode(data);
-      _channel!.sink.add(message);
-      debugPrint('Message envoyé au serveur: $message');
-    } else {
-      debugPrint('WebSocket non connecté, impossible d\'envoyer le message.');
+    if (!_isConnected || _channel == null) {
+      debugPrint("WebSocketService: Non connecté. Impossible d'envoyer le message.");
+      return;
     }
+    
+    final message = jsonEncode(data);
+
+    _channel!.sink.add(message);
+    debugPrint("WebSocketService: Message envoyé: $message");
   }
 
-  void disconnect() {
-    if (_channel != null) {
-      _channel!.sink.close();
-      _channel = null;
-    }
-  }
-
-  // Permet de fermer le StreamController si le service est jeté
   void dispose() {
-    _messageController.close();
-    disconnect();
+    debugPrint("WebSocketService: Dispose appelé.");
+    _reconnectTimer?.cancel();
+    _channel?.sink.close();
+    _messageController?.close();
+    _isConnected = false;
   }
 }
-
-// Fournisseur Riverpod pour le service WebSocket
-final webSocketServiceProvider = Provider<WebSocketService>((ref) {
-  const String serverUrl = 'ws://10.89.44.112:8765';
-  final service = WebSocketService(serverUrl);
-  
-  ref.onDispose(() {
-    service.disconnect();
-    service.dispose();
-  });
-  return service;
-});

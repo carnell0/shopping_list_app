@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'register_face_screen.dart';
 import 'face_unlock_screen.dart';
 import 'home_screen.dart';
 
@@ -81,17 +80,7 @@ class _AuthScreenWrapperState extends State<AuthScreenWrapper> {
                 ),
               ],
             ),
-            const SizedBox(height: 32),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const RegisterFaceScreen(),
-                  ),
-                );
-              },
-              child: const Text("Pas encore enregistré ? Enregistrer mon visage"),
-            ),
+            
           ],
         ),
       ),

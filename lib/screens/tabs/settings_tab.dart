@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../register_face_screen.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
@@ -23,7 +24,7 @@ class SettingsTab extends StatelessWidget {
             radius: 50,
             backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             child: Icon(
-              Icons.info_outline,
+              Icons.settings_outlined,
               size: 50,
               color: Theme.of(context).colorScheme.onPrimaryContainer,
             ),
@@ -58,11 +59,34 @@ class SettingsTab extends StatelessWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Column(
               children: [
-                _buildInfoTile(
+                _buildTappableTile(
+                  context: context,
+                  icon: Icons.face,
+                  title: 'Enregistrer mon visage',
+                  subtitle: 'Utiliser la reconnaissance faciale',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterFaceScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Column(
+              children: [
+                _buildTappableTile(
+                  context: context,
                   icon: Icons.star_outlined,
                   title: 'Notez nous',
                   subtitle: 'Laissez une note sur le store',
-                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {},
                 ),
               ],
             ),
@@ -76,13 +100,27 @@ class SettingsTab extends StatelessWidget {
     required IconData icon,
     required String title,
     required String subtitle,
-    Widget? trailing,
   }) {
     return ListTile(
       leading: Icon(icon, size: 30),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
       subtitle: Text(subtitle, style: const TextStyle(fontSize: 16)),
-      trailing: trailing,
+    );
+  }
+
+  Widget _buildTappableTile({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      onTap: onTap,
+      leading: Icon(icon, size: 30),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 16)),
+      trailing: const Icon(Icons.chevron_right),
     );
   }
 }
